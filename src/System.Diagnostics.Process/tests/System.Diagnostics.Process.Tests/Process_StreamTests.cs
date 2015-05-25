@@ -24,7 +24,12 @@ namespace System.Diagnostics.ProcessTests
             return CreateProcess("stream");
         }
 
-        [Fact]
+        Process CreateProcessByteAtATime()
+        {
+            return CreateProcess("byteAtATime");
+        }
+
+        [Fact, ActiveIssue(1538, PlatformID.OSX)]
         public void Process_SyncErrorStream()
         {
             Process p = CreateProcessError();
@@ -34,7 +39,7 @@ namespace System.Diagnostics.ProcessTests
             Assert.True(p.WaitForExit(WaitInMS));
         }
 
-        [Fact]
+        [Fact, ActiveIssue(1538, PlatformID.OSX)]
         public void Process_AsyncErrorStream()
         {
             StringBuilder sb = new StringBuilder();
@@ -50,7 +55,7 @@ namespace System.Diagnostics.ProcessTests
             Assert.Equal(TestExeName + " error stream", sb.ToString());
         }
 
-        [Fact]
+        [Fact, ActiveIssue(1538, PlatformID.OSX)]
         public void Process_SyncOutputStream()
         {
             Process p = CreateProcessStream();
@@ -61,7 +66,7 @@ namespace System.Diagnostics.ProcessTests
             Assert.Equal(s, TestExeName + " started" + Environment.NewLine + TestExeName + " closed" + Environment.NewLine);
         }
 
-        [Fact]
+        [Fact, ActiveIssue(1538, PlatformID.OSX)]
         public void Process_AsyncOutputStream()
         {
             {
@@ -106,6 +111,24 @@ namespace System.Diagnostics.ProcessTests
                 writer.WriteLine(str);
             }
             Assert.True(p.WaitForExit(WaitInMS));
+        }
+
+        [Fact]
+        public void Process_AsyncHalfCharacterAtATime()
+        {
+            var receivedOutput = false;
+            Process p = CreateProcessByteAtATime();
+            p.StartInfo.RedirectStandardOutput = true;
+            p.StartInfo.StandardOutputEncoding = Encoding.Unicode;
+            p.OutputDataReceived += (s, e) =>
+            {
+                Assert.Equal(e.Data, "a");
+                receivedOutput = true;
+            };
+            p.Start();
+            p.BeginOutputReadLine();
+            Assert.True(p.WaitForExit(WaitInMS));
+            Assert.True(receivedOutput);
         }
     }
 }

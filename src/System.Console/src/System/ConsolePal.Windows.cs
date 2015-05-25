@@ -104,22 +104,10 @@ namespace System
 
         private static Encoding GetEncoding(int codePage)
         {
-            // In most scenarios, 437 is the codepage used for Console encoding. However this encoding is not available 
-            // by default or on all platforms, and so we use the try{} catch{} pattern and use UTF8 in case of failure. 
-            // This ensures that if the user uses Encoding.RegisterProvider to register the encoding the Console class 
-            // can automatically get the codepage as well.
-            Encoding enc;
-            try
-            {
-                enc = Encoding.GetEncoding(codePage);
-                Debug.Assert(!(enc is UnicodeEncoding)); // if this ever changes, will need to update how we read/write Windows console streams
-                enc = new ConsoleEncoding(enc); // ensure encoding doesn't output a preamble
-            }
-            catch (NotSupportedException)
-            {
-                enc = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-            }
-            return enc;
+            Encoding enc = EncodingHelper.GetSupportedConsoleEncoding(codePage);
+            Debug.Assert(!(enc is UnicodeEncoding)); // if this ever changes, will need to update how we read/write Windows console stream
+
+            return new ConsoleEncoding(enc); // ensure encoding doesn't output a preamble
         }
 
         // For ResetColor
@@ -409,6 +397,53 @@ namespace System
                 if (errorCode == Interop.mincore.Errors.ERROR_NO_DATA || errorCode == Interop.mincore.Errors.ERROR_BROKEN_PIPE)
                     return Interop.mincore.Errors.ERROR_SUCCESS;
                 return errorCode;
+            }
+        }
+
+        internal sealed class ControlCHandlerRegistrar
+        {
+            private bool _handlerRegistered;
+            private Interop.mincore.ConsoleCtrlHandlerRoutine _handler;
+
+            internal ControlCHandlerRegistrar()
+            {
+                _handler = new Interop.mincore.ConsoleCtrlHandlerRoutine(BreakEvent);
+            }
+
+            internal void Register()
+            {
+                Debug.Assert(!_handlerRegistered);
+
+                bool r = Interop.mincore.SetConsoleCtrlHandler(_handler, true);
+                if (!r)
+                {
+                    throw Win32Marshal.GetExceptionForLastWin32Error();
+                }
+
+                _handlerRegistered = true;
+            }
+
+            internal void Unregister()
+            {
+                Debug.Assert(_handlerRegistered);
+
+                bool r = Interop.mincore.SetConsoleCtrlHandler(_handler, false);
+                if (!r)
+                {
+                    throw Win32Marshal.GetExceptionForLastWin32Error();
+                }
+                _handlerRegistered = false;
+            }
+
+            private static bool BreakEvent(int controlType)
+            {
+                if (controlType != Interop.mincore.CTRL_C_EVENT &&
+                    controlType != Interop.mincore.CTRL_BREAK_EVENT)
+                {
+                    return false;
+                }
+
+                return Console.HandleBreakEvent(controlType == Interop.mincore.CTRL_C_EVENT ? ConsoleSpecialKey.ControlC : ConsoleSpecialKey.ControlBreak);
             }
         }
     }

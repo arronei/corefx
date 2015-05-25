@@ -2,6 +2,7 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using Microsoft.Win32.SafeHandles;
+using System;
 using System.IO.Pipes;
 using System.Threading.Tasks;
 using Xunit;
@@ -14,7 +15,7 @@ public class AnonymousPipesSimpleTest
         using (AnonymousPipeServerStream server = new AnonymousPipeServerStream(PipeDirection.Out))
         {
             Assert.True(server.IsConnected);
-            using (AnonymousPipeClientStream client = new AnonymousPipeClientStream(PipeDirection.In, server.ClientSafePipeHandle))
+            using (AnonymousPipeClientStream client = new AnonymousPipeClientStream(PipeDirection.In, server.GetClientHandleAsString()))
             {
                 Assert.True(server.IsConnected);
                 Assert.True(client.IsConnected);
@@ -26,6 +27,57 @@ public class AnonymousPipesSimpleTest
                 Assert.Equal(1, client.Read(received, 0, 1));
                 Assert.Equal(sent[0], received[0]);
             }
+            Assert.Throws<System.IO.IOException>(() => server.WriteByte(5));
+        }
+    }
+
+    [Fact]
+    public static void ServerSendsByteClientReceivesServerClone()
+    {
+        using (AnonymousPipeServerStream serverBase = new AnonymousPipeServerStream(PipeDirection.Out))
+        {
+            using (AnonymousPipeServerStream server = new AnonymousPipeServerStream(PipeDirection.Out, serverBase.SafePipeHandle, serverBase.ClientSafePipeHandle))
+            {
+                Assert.True(server.IsConnected);
+                using (AnonymousPipeClientStream client = new AnonymousPipeClientStream(PipeDirection.In, server.GetClientHandleAsString()))
+                {
+                    Assert.True(server.IsConnected);
+                    Assert.True(client.IsConnected);
+
+                    byte[] sent = new byte[] { 123 };
+                    byte[] received = new byte[] { 0 };
+                    server.Write(sent, 0, 1);
+
+                    Assert.Equal(1, client.Read(received, 0, 1));
+                    Assert.Equal(sent[0], received[0]);
+                }
+                Assert.Throws<System.IO.IOException>(() => server.WriteByte(5));
+            }
+        }
+    }
+
+    [Fact]
+    public static void ServerSendsByteClientReceivesAsync()
+    {
+        using (AnonymousPipeServerStream server = new AnonymousPipeServerStream(PipeDirection.Out))
+        {
+            Assert.True(server.IsConnected);
+            using (AnonymousPipeClientStream client = new AnonymousPipeClientStream(server.GetClientHandleAsString()))
+            {
+                Assert.True(server.IsConnected);
+                Assert.True(client.IsConnected);
+
+                byte[] sent = new byte[] { 123 };
+                byte[] received = new byte[] { 0 };
+                Task writeTask = server.WriteAsync(sent, 0, 1);
+                writeTask.Wait();
+
+                Task<int> readTask = client.ReadAsync(received, 0, 1);
+                readTask.Wait();
+
+                Assert.Equal(1, readTask.Result);
+                Assert.Equal(sent[0], received[0]);
+            }
         }
     }
 
@@ -35,18 +87,25 @@ public class AnonymousPipesSimpleTest
         using (AnonymousPipeServerStream server = new AnonymousPipeServerStream(PipeDirection.In))
         {
             Assert.True(server.IsConnected);
+            server.ReadMode = PipeTransmissionMode.Byte;
+
             using (AnonymousPipeClientStream client = new AnonymousPipeClientStream(PipeDirection.Out, server.ClientSafePipeHandle))
             {
                 Assert.True(server.IsConnected);
                 Assert.True(client.IsConnected);
+                client.ReadMode = PipeTransmissionMode.Byte;
 
                 byte[] sent = new byte[] { 123 };
                 byte[] received = new byte[] { 0 };
                 client.Write(sent, 0, 1);
 
+                server.DisposeLocalCopyOfClientHandle();
+
                 Assert.Equal(1, server.Read(received, 0, 1));
                 Assert.Equal(sent[0], received[0]);
             }
+            // not sure why the following isn't thrown because pipe is broken
+            //Assert.Throws<System.IO.IOException>(() => server.ReadByte());
         }
     }
 
@@ -86,7 +145,14 @@ public class AnonymousPipesSimpleTest
             Assert.False(string.IsNullOrWhiteSpace(server.GetClientHandleAsString()));
             Assert.False(server.IsAsync);
             Assert.True(server.IsConnected);
-            Assert.Equal(0, server.OutBufferSize);
+            if (Interop.IsWindows)
+            {
+                Assert.Equal(0, server.OutBufferSize);
+            }
+            else
+            {
+                Assert.Throws<PlatformNotSupportedException>(() => server.OutBufferSize);
+            }
             Assert.Equal(PipeTransmissionMode.Byte, server.ReadMode);
             Assert.NotNull(server.SafePipeHandle);
             Assert.Equal(PipeTransmissionMode.Byte, server.TransmissionMode);
@@ -94,7 +160,14 @@ public class AnonymousPipesSimpleTest
             server.Write(new byte[] { 123 }, 0, 1);
             server.WriteAsync(new byte[] { 124 }, 0, 1).Wait();
             server.Flush();
-            server.WaitForPipeDrain();
+            if (Interop.IsWindows)
+            {
+                server.WaitForPipeDrain();
+            }
+            else
+            {
+                Assert.Throws<PlatformNotSupportedException>(() => server.WaitForPipeDrain());
+            }
 
             clientTask.Wait();
             server.DisposeLocalCopyOfClientHandle();
@@ -104,7 +177,14 @@ public class AnonymousPipesSimpleTest
         {
             Task clientTask = Task.Run(() => StartClient(PipeDirection.Out, server.ClientSafePipeHandle));
 
-            Assert.Equal(4096, server.InBufferSize);
+            if (Interop.IsWindows)
+            {
+                Assert.Equal(4096, server.InBufferSize);
+            }
+            else
+            {
+                Assert.Throws<PlatformNotSupportedException>(() => server.InBufferSize);
+            }
             byte[] readData = new byte[] { 0, 1 };
             Assert.Equal(1, server.Read(readData, 0, 1));
             Assert.Equal(1, server.ReadAsync(readData, 1, 1).Result);
@@ -130,14 +210,28 @@ public class AnonymousPipesSimpleTest
                 Assert.True(client.CanWrite);
                 Assert.False(client.IsAsync);
                 Assert.True(client.IsConnected);
-                Assert.Equal(0, client.OutBufferSize);
+                if (Interop.IsWindows)
+                {
+                    Assert.Equal(0, client.OutBufferSize);
+                }
+                else
+                {
+                    Assert.Throws<PlatformNotSupportedException>(() => client.OutBufferSize);
+                }
                 Assert.Equal(PipeTransmissionMode.Byte, client.ReadMode);
                 Assert.NotNull(client.SafePipeHandle);
                 Assert.Equal(PipeTransmissionMode.Byte, client.TransmissionMode);
 
                 client.Write(new byte[] { 123 }, 0, 1);
                 client.WriteAsync(new byte[] { 124 }, 0, 1).Wait();
-                client.WaitForPipeDrain();
+                if (Interop.IsWindows)
+                {
+                    client.WaitForPipeDrain();
+                }
+                else
+                {
+                    Assert.Throws<PlatformNotSupportedException>(() => client.WaitForPipeDrain());
+                }
                 client.Flush();
 
                 serverTask.Wait();
@@ -150,7 +244,14 @@ public class AnonymousPipesSimpleTest
             {
                 Task serverTask = Task.Run(() => DoStreamOperations(server));
 
-                Assert.Equal(4096, client.InBufferSize);
+                if (Interop.IsWindows)
+                {
+                    Assert.Equal(4096, client.InBufferSize);
+                }
+                else
+                {
+                    Assert.Throws<PlatformNotSupportedException>(() => client.InBufferSize);
+                }
                 byte[] readData = new byte[] { 0, 1 };
                 Assert.Equal(1, client.Read(readData, 0, 1));
                 Assert.Equal(1, client.ReadAsync(readData, 1, 1).Result);

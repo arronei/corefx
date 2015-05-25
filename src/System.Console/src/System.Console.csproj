@@ -18,10 +18,11 @@
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'OSX_Release|AnyCPU' " />
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Windows_Debug|AnyCPU' " />
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Windows_Release|AnyCPU' " />
-  <!-- References are resolved from packages.config -->
   <ItemGroup>
     <Compile Include="System\Console.cs" />
+    <Compile Include="System\ConsoleCancelEventArgs.cs" />
     <Compile Include="System\ConsoleColor.cs" />
+    <Compile Include="System\ConsoleSpecialKey.cs" />
     <Compile Include="System\IO\ConsoleStream.cs" />
     <Compile Include="System\IO\SyncTextReader.cs" />
     <Compile Include="System\IO\SyncTextWriter.cs" />
@@ -69,6 +70,9 @@
     <Compile Include="$(CommonPath)\Interop\Windows\mincore\Interop.ReadConsole.cs">
       <Link>Common\Interop\Windows\Interop.ReadConsole.cs</Link>
     </Compile>
+    <Compile Include="$(CommonPath)\Interop\Windows\mincore\Interop.SetConsoleCtrlHandler.cs">
+      <Link>Common\Interop\Windows\Interop.SetConsoleCtrlHandler.cs</Link>
+    </Compile>
     <Compile Include="$(CommonPath)\Interop\Windows\mincore\Interop.SetConsoleTextAttribute.cs">
       <Link>Common\Interop\Windows\Interop.SetConsoleTextAttribute.cs</Link>
     </Compile>
@@ -80,6 +84,9 @@
     </Compile>
     <Compile Include="$(CommonPath)\System\IO\Win32Marshal.cs">
       <Link>Common\System\IO\Win32Marshal.cs</Link>
+    </Compile>
+    <Compile Include="$(CommonPath)\System\Text\EncodingHelper.cs">
+      <Link>Common\System\IO\EncodingHelper.cs</Link>
     </Compile>
   </ItemGroup>
   <ItemGroup Condition=" '$(TargetsUnix)' == 'true' ">
@@ -105,9 +112,6 @@
     <Compile Include="$(CommonPath)\Interop\Unix\libc\Interop.close.cs">
       <Link>Common\Interop\Unix\Interop.close.cs</Link>
     </Compile>
-    <Compile Include="$(CommonPath)\Interop\Unix\libc\Interop.getenv.cs">
-      <Link>Common\Interop\Unix\Interop.getenv.cs</Link>
-    </Compile>
     <Compile Include="$(CommonPath)\Interop\Unix\libc\Interop.gnu_get_libc_version.cs">
       <Link>Common\Interop\Unix\Interop.gnu_get_libc_version.cs</Link>
     </Compile>
@@ -129,9 +133,28 @@
     <Compile Include="$(CommonPath)\Interop\Unix\libc\Interop.strerror.cs">
       <Link>Common\Interop\Unix\Interop.strerror.cs</Link>
     </Compile>
+    <Compile Include="$(CommonPath)\Interop\Unix\libcoreclr\Interop.GetFileInformation.cs">
+      <Link>Common\Interop\Unix\Interop.GetFileInformation.cs"</Link>
+    </Compile>
+  </ItemGroup>
+  <ItemGroup Condition=" '$(TargetsLinux)' == 'true' ">
+    <Compile Include="$(CommonPath)\Interop\Linux\Interop.Errors.cs">
+      <Link>Common\Interop\Linux\Interop.Errors.cs</Link>
+    </Compile>
+    <Compile Include="$(CommonPath)\Interop\Linux\libc\Interop.OpenFlags.cs">
+      <Link>Common\Interop\Linux\Interop.OpenFlags.cs</Link>
+    </Compile>
+  </ItemGroup>
+  <ItemGroup Condition=" '$(TargetsOSX)' == 'true' ">
+    <Compile Include="$(CommonPath)\Interop\OSX\Interop.Errors.cs">
+      <Link>Common\Interop\OSX\Interop.Errors.cs</Link>
+    </Compile>
+    <Compile Include="$(CommonPath)\Interop\OSX\libc\Interop.OpenFlags.cs">
+      <Link>Common\Interop\OSX\Interop.OpenFlags.cs</Link>
+    </Compile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="packages.config" />
+    <None Include="project.json" />
   </ItemGroup>
   <Import Project="$([MSBuild]::GetDirectoryNameOfFileAbove($(MSBuildThisFileDirectory), dir.targets))\dir.targets" />
 </Project>
